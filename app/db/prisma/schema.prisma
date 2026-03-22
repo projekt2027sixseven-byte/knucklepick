@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+  INCOMPLETE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  EXTREME
+}
+
+model User {
+  id                 String            @id @default(cuid())
+  email              String            @unique
+  passwordHash       String?
+  name               String?
+  role               UserRole          @default(USER)
+  stripeCustomerId   String?           @unique
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  subscription       Subscription?
+  usageLogs          UsageLog[]
+  preferences        UserPreferences?
+  watchlist          WatchlistItem[]
+  savedPicks         SavedPick[]
+}
+
+model UserPreferences {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  digestEnabled         Boolean   @default(false)
+  digestHourUtc         Int       @default(8)
+  favoriteLeagueIds     String[]  @default([])
+  reducedMotion         Boolean   @default(false)
+  onboardingStep        Int       @default(0)
+  onboardingCompletedAt DateTime?
+  lastDigestSentAt      DateTime?
+  updatedAt             DateTime  @updatedAt
+}
+
+model Plan {
+  id                String         @id @default(cuid())
+  slug              String         @unique
+  name              String
+  dailyMatchLimit   Int
+  watchlistLimit    Int            @default(25)
+  savedPickLimit    Int            @default(40)
+  digestEnabled     Boolean        @default(false)
+  apiAccess         Boolean        @default(false)
+  stripePriceId     String?
+  subscriptions     Subscription[]
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeSubscriptionId String?            @unique
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model League {
+  id         String  @id @default(cuid())
+  externalId String? @unique
+  name       String
+  country    String?
+  logoUrl    String?
+  matches    Match[]
+  teams      Team[]
+}
+
+model Team {
+  id          String  @id @default(cuid())
+  externalId  String? @unique
+  name        String
+  shortName   String?
+  logoUrl     String?
+  leagueId    String?
+  league      League? @relation(fields: [leagueId], references: [id])
+  homeMatches Match[] @relation("HomeTeam")
+  awayMatches Match[] @relation("AwayTeam")
+}
+
+model Match {
+  id              String           @id @default(cuid())
+  externalId      String?          @unique
+  season          String?
+  utcDate         DateTime
+  status          String           @default("SCHEDULED")
+  homeTeamId      String
+  awayTeamId      String
+  homeTeam        Team             @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam        Team             @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  leagueId        String?
+  league          League?          @relation(fields: [leagueId], references: [id])
+  homeScore       Int?
+  awayScore       Int?
+  oddsFetchedAt   DateTime?
+  odds            Odds[]
+  stats           MatchStats?
+  predictions     Prediction[]
+  similarityCases SimilarityCase[]
+  watchlistItems  WatchlistItem[]
+  savedPicks      SavedPick[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([utcDate])
+  @@index([status])
+  @@index([utcDate, status])
+  @@index([homeTeamId, status, utcDate])
+  @@index([awayTeamId, status, utcDate])
+}
+
+model WatchlistItem {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId             String
+  match               Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  notifyBeforeKickoff Boolean  @default(true)
+  note                String?
+  createdAt           DateTime @default(now())
+
+  @@unique([userId, matchId])
+  @@index([userId])
+  @@index([matchId])
+}
+
+model SavedPick {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId   String
+  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  label     String?
+  snapshot  Json
+  status    String    @default("OPEN")
+  createdAt DateTime  @default(now())
+  settledAt DateTime?
+
+  @@index([userId])
+  @@index([matchId])
+}
+
+model Odds {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  bookmaker String?
+  homeOdds  Float
+  drawOdds  Float
+  awayOdds  Float
+  over25    Float?
+  under25   Float?
+  bttsYes   Float?
+  bttsNo    Float?
+  fetchedAt DateTime @default(now())
+
+  @@index([matchId])
+}
+
+model MatchStats {
+  id               String  @id @default(cuid())
+  matchId          String  @unique
+  match            Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  homeFormPts      Float?
+  awayFormPts      Float?
+  homeXG           Float?
+  awayXG           Float?
+  homeGoalsFor     Float?
+  homeGoalsAgainst Float?
+  awayGoalsFor     Float?
+  awayGoalsAgainst Float?
+  strengthGap      Float?
+  rawJson          Json?
+}
+
+model Prediction {
+  id                       String              @id @default(cuid())
+  matchId                  String
+  match                    Match               @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  outcomePrediction        String
+  confidence               Float
+  modelConfidence          Float
+  dataQualityScore         Float
+  marketAlignmentScore     Float
+  similarityScore          Float
+  volatilityScore          Float
+  probHome                 Float               @default(0.33)
+  probDraw                 Float               @default(0.34)
+  probAway                 Float               @default(0.33)
+  calibratedHome           Float?
+  calibratedDraw           Float?
+  calibratedAway           Float?
+  goalsBandLow             Float?
+  goalsBandHigh            Float?
+  trustIndex               Float               @default(50)
+  modelVersion             String              @default("elite-3.0.0-statistical-core")
+  methodology              Json?
+  expectedHomeGoals        Float
+  expectedAwayGoals        Float
+  expectedTotalGoals       Float
+  exactScore               String
+  altScore                 String?
+  bttsPrediction           String
+  overUnderPrediction      String
+  valueScore               Float
+  riskLevel                RiskLevel
+  reasoning                String              @db.Text
+  noBet                    Boolean             @default(false)
+  trapMatch                Boolean             @default(false)
+  scenarios                Json?
+  similarityStats          Json?
+  factors                  PredictionFactor[]
+  createdAt                DateTime            @default(now())
+
+  @@index([matchId])
+  @@index([createdAt])
+}
+
+model PredictionFactor {
+  id            String     @id @default(cuid())
+  predictionId  String
+  prediction    Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  name          String
+  weight        Float
+  contribution  Float
+  detail        String?
+}
+
+model SimilarityCase {
+  id          String   @id @default(cuid())
+  matchId     String
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  refMatchExt String
+  similarity  Float
+  result1x2   String?
+  score       String?
+  metadata    Json?
+}
+
+model UsageLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  matchId   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String?
+  action    String
+  payload   Json?
+  createdAt DateTime @default(now())
+}
+
+model EngineWeight {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Float
+  updatedAt DateTime @updatedAt
+}
+
+model AppConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  isSecret  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}

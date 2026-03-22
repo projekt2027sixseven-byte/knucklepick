@@ -1,0 +1,29 @@
+{
+  "name": "match-oracle-elite-ai",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "workspaces": [
+    "app/frontend",
+    "app/backend"
+  ],
+  "scripts": {
+    "predev": "node scripts/ensure-env.cjs",
+    "setup:local": "node scripts/ensure-env.cjs && prisma generate --schema app/db/prisma/schema.prisma && prisma db push --schema app/db/prisma/schema.prisma && npm run db:seed",
+    "db:generate": "prisma generate --schema app/db/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema app/db/prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema app/db/prisma/schema.prisma",
+    "db:push": "prisma db push --schema app/db/prisma/schema.prisma",
+    "db:seed": "npm run db:seed -w app/backend",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w app/backend\" \"npm run dev -w app/frontend\"",
+    "build": "npm run build -w app/backend && npm run build -w app/frontend",
+    "start:backend": "npm run start -w @match-oracle/backend",
+    "verify": "npm run db:generate && npm run build",
+    "lint": "npm run lint -w app/frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prisma": "^6.5.0"
+  }
+}

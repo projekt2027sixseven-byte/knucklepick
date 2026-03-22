@@ -1,0 +1,30 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy API + managed Postgres; set secrets (JWT, Stripe, CORS) in the Render dashboard.
+
+databases:
+  - name: match-oracle-db
+    databaseName: match_oracle
+    user: match_oracle
+
+services:
+  - type: web
+    name: match-oracle-api
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: npm install && npm run build -w @match-oracle/backend
+    startCommand: npm run start -w @match-oracle/backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: match-oracle-db
+          property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: match-oracle-db
+          property: connectionString
+      - key: TRUST_PROXY
+        value: "true"
