@@ -2,6 +2,9 @@
   "name": "@match-oracle/frontend",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "node scripts/dev.cjs",
     "dev:3001": "next dev -p 3001",

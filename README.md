@@ -123,9 +123,10 @@ See `render.yaml` as a starting blueprint. It provisions a Postgres instance and
 ### Frontend (Vercel)
 
 1. Import the Git repo.
-2. Set **Root Directory** to `app/frontend` (recommended).
-3. The included `app/frontend/vercel.json` runs `npm install` and `npm run build -w @match-oracle/frontend` from the monorepo root.
-4. Set `NEXT_PUBLIC_API_URL` to your public API URL and `NEXT_PUBLIC_APP_URL` to the Vercel URL (or your custom domain).
+2. Set **Root Directory** to `app/frontend` (required). If it is left as the repository root, the install/build steps will not find the workspace and the deployment will fail.
+3. The included `app/frontend/vercel.json` runs `npm install --prefix ../..` and `npm run build --prefix ../.. -w @match-oracle/frontend` so the monorepo root `package-lock.json` is used without fragile `cd` paths.
+4. Use **Node.js 20** (see repo `.nvmrc`); Vercel picks this up automatically in most projects.
+5. Set `NEXT_PUBLIC_API_URL` to your public API URL. Optionally set `NEXT_PUBLIC_APP_URL`; otherwise `VERCEL_URL` is used for metadata on preview/production.
 
 ### Stripe
 
