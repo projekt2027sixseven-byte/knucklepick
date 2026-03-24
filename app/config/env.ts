@@ -34,10 +34,11 @@ const envSchema = z
     DIGEST_FROM_EMAIL: z.string().optional(),
     /** Comma-separated extra CORS origins (e.g. Vercel preview URLs). */
     CORS_ORIGINS: z.string().optional(),
-    /** Set to "false" or "0" to disable cron jobs (e.g. secondary instances). Default: enabled. */
+    /** Set to "true" or "1" to enable cron jobs. Default: off in production (stable launch), on in development. */
     SCHEDULER_ENABLED: z.preprocess((v) => {
+      if (v === "true" || v === "1") return true;
       if (v === "false" || v === "0") return false;
-      return true;
+      return process.env.NODE_ENV !== "production";
     }, z.boolean()),
     /** Trust X-Forwarded-* from reverse proxy (Railway, Render, etc.). Default: on in production. */
     TRUST_PROXY: z.preprocess((v) => {
