@@ -18,6 +18,23 @@ The Prisma client is generated under **`app/db/prisma/generated/client`** (not `
 - PostgreSQL with `DATABASE_URL` (and `JWT_SECRET`, etc.) in the repo root `.env`
 - Seeded data: `npm run setup:local` or at least `npm run db:seed` so matches with predictions exist
 
+### `migrate deploy` → P3005 (“No migration found” / “database is not empty”)
+
+This repo keeps the schema in **`app/db/prisma/schema.prisma`** but does **not** ship a `migrations/` history yet. **`prisma migrate deploy`** expects migration folders; without them you get **P3005** on a non-empty database.
+
+**Local / dev:** align the database to the current schema, then seed:
+
+```bash
+npm run db:push
+npm run db:seed
+```
+
+(`setup:local` already runs `db:push` before seed.)
+
+### Seed fails: column does not exist (e.g. `predictionEligibility`)
+
+The Prisma client is newer than your physical database. Run **`npm run db:push`** so Postgres gets the new columns and enums, then **`npm run db:seed`** again.
+
 ## Backend (API integration)
 
 Runs against your real `DATABASE_URL`. Creates a throwaway user (`vitest-*@integration.test`) and deletes it in `afterAll`.
