@@ -1,4 +1,6 @@
 import "./bootstrap-env";
+/** Must load before any `express.Router()` modules so async route rejections reach the error handler. */
+import "express-async-errors";
 import { loadEnv } from "../../config/env";
 import { prisma } from "./prisma";
 import { createApp } from "./createApp";
@@ -19,6 +21,8 @@ function pgTargetForLog(url: string): string {
 const env = loadEnv();
 log.info("boot", {
   nodeEnv: env.NODE_ENV,
+  demoPublicLaunch: env.DEMO_PUBLIC_LAUNCH,
+  mockDataMode: Boolean(env.MOCK_DATA_MODE),
   prismaQueriesVia: pgTargetForLog(env.DATABASE_URL),
   prismaDirectUrlHost: pgTargetForLog(env.DIRECT_URL ?? env.DATABASE_URL),
   scheduler: env.SCHEDULER_ENABLED,
@@ -41,7 +45,11 @@ async function shutdown(signal: string): Promise<void> {
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });
-  await prisma.$disconnect();
+  try {
+    await prisma.$disconnect();
+  } catch {
+    /* ignore */
+  }
   process.exit(0);
 }
 

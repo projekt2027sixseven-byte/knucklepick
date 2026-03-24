@@ -22,6 +22,17 @@ export function stopScheduler(): void {
 }
 
 export function startScheduler(prisma: PrismaClient): void {
+  if (process.env.DEMO_PUBLIC_LAUNCH === "true" || process.env.DEMO_PUBLIC_LAUNCH === "1") {
+    console.log(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: "info",
+        service: "knuckle-jobs",
+        msg: "scheduler_skipped_demo_public_launch",
+      })
+    );
+    return;
+  }
   let env: ReturnType<typeof loadEnv>;
   try {
     env = loadEnv();

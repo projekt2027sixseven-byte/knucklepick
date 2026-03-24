@@ -98,6 +98,8 @@ export function createApp(): express.Application {
       ok: true,
       service: "knuckle-backend",
       env: env.NODE_ENV,
+      demoPublicLaunch: Boolean(env.DEMO_PUBLIC_LAUNCH),
+      mockDataMode: Boolean(env.MOCK_DATA_MODE),
       version: env.APP_VERSION ?? null,
       commit: env.GIT_COMMIT ?? null,
       maintenance: Boolean(env.MAINTENANCE_MODE),
@@ -140,6 +142,13 @@ export function createApp(): express.Application {
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     log.error("unhandled_error", { err: err instanceof Error ? err.message : String(err) });
+    if (env.DEMO_PUBLIC_LAUNCH) {
+      res.status(500).json({
+        error: "demo_unavailable",
+        message: "Demo API hit an error — try again shortly.",
+      });
+      return;
+    }
     res.status(500).json({ error: "Internal server error" });
   });
 

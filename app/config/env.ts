@@ -21,6 +21,11 @@ const envSchema = z
     FOOTBALL_API_KEY: z.string().optional(),
     ODDS_API_KEY: z.string().optional(),
     MOCK_DATA_MODE: boolish,
+    /**
+     * Relaxed production validation + forces scheduler off + intended for first public demo.
+     * Set with MOCK_DATA_MODE=true and a real DATABASE_URL (empty DB is fine after migrate/seed).
+     */
+    DEMO_PUBLIC_LAUNCH: boolish,
     /** Instant kill-switch — returns 503 for API routes (except health/ready). Also see AppConfig MAINTENANCE_MODE. */
     MAINTENANCE_MODE: boolish,
     STRIPE_SECRET_KEY: z.string().optional(),
@@ -34,8 +39,11 @@ const envSchema = z
     DIGEST_FROM_EMAIL: z.string().optional(),
     /** Comma-separated extra CORS origins (e.g. Vercel preview URLs). */
     CORS_ORIGINS: z.string().optional(),
-    /** Set to "true" or "1" to enable cron jobs. Default: off in production (stable launch), on in development. */
+    /** Set to "true" or "1" to enable cron jobs. Forced off when DEMO_PUBLIC_LAUNCH is set. Default: off in production, on in development. */
     SCHEDULER_ENABLED: z.preprocess((v) => {
+      const demo =
+        process.env.DEMO_PUBLIC_LAUNCH === "true" || process.env.DEMO_PUBLIC_LAUNCH === "1";
+      if (demo) return false;
       if (v === "true" || v === "1") return true;
       if (v === "false" || v === "0") return false;
       return process.env.NODE_ENV !== "production";
@@ -52,7 +60,9 @@ const envSchema = z
     GIT_COMMIT: z.string().max(64).optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.NODE_ENV === "production") {
+    if (data.NODE_ENV !== "production") return;
+    const relax = data.DEMO_PUBLIC_LAUNCH;
+    if (!relax) {
       if (!data.FRONTEND_URL.startsWith("https://") && !data.FRONTEND_URL.startsWith("http://localhost")) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -60,7 +70,9 @@ const envSchema = z
           path: ["FRONTEND_URL"],
         });
       }
-      const jwt = data.JWT_SECRET;
+    }
+    const jwt = data.JWT_SECRET;
+    if (!relax) {
       if (/change-me/i.test(jwt) || /^password$/i.test(jwt) || /^secret$/i.test(jwt) || /^admin$/i.test(jwt)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -68,13 +80,16 @@ const envSchema = z
           path: ["JWT_SECRET"],
         });
       }
-      if (jwt.length < 24) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "JWT_SECRET should be at least 24 characters in production",
-          path: ["JWT_SECRET"],
-        });
-      }
+    }
+    const minJwt = relax ? 16 : 24;
+    if (jwt.length < minJwt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: relax
+          ? `JWT_SECRET must be at least ${minJwt} characters`
+          : "JWT_SECRET should be at least 24 characters in production",
+        path: ["JWT_SECRET"],
+      });
     }
   });
 
