@@ -4,20 +4,23 @@ WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
 
-# Prisma validate/generate during npm ci (backend postinstall) needs placeholder URLs.
+# Prisma generate validates the schema; URLs need not be reachable for `prisma generate`.
 ENV DATABASE_URL="postgresql://dummy:dummy@127.0.0.1:5432/dummy"
 ENV DIRECT_URL="postgresql://dummy:dummy@127.0.0.1:5432/dummy"
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY app/backend/package.json app/backend/
 COPY app/frontend/package.json app/frontend/
 COPY app/db ./app/db
 
-# Install devDependencies too (Prisma CLI, TypeScript) — runtime image still starts only the API.
+# Include devDependencies so the Prisma CLI is installed (root + workspaces).
 RUN npm ci --include=dev
 
 COPY app ./app
 COPY scripts ./scripts
+
+# `app/db/prisma/generated/` is gitignored; `app/db/prisma-client.ts` imports `./prisma/generated/client`.
+RUN npx prisma generate --schema app/db/prisma/schema.prisma
 
 ENV NODE_ENV=production
 

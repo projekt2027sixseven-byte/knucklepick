@@ -4,7 +4,8 @@
 
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm ci && npx prisma generate --schema app/db/prisma/schema.prisma && npm run build -w @match-oracle/backend"
+# Prisma CLI lives in devDependencies; production-style npm ci can omit it without --include=dev.
+buildCommand = "npm ci --include=dev && npx prisma generate --schema app/db/prisma/schema.prisma && npm run build -w @match-oracle/backend"
 
 [deploy]
 startCommand = "npm run start -w @match-oracle/backend"
