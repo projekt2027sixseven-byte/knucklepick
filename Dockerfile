@@ -13,7 +13,8 @@ COPY app/backend/package.json app/backend/
 COPY app/frontend/package.json app/frontend/
 COPY app/db ./app/db
 
-RUN npm ci
+# Install devDependencies too (Prisma CLI, TypeScript) — runtime image still starts only the API.
+RUN npm ci --include=dev
 
 COPY app ./app
 COPY scripts ./scripts

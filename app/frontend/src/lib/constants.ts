@@ -1,2 +1,2 @@
-export const PRODUCT_NAME = "Oracle Pitch";
-export const PRODUCT_TAGLINE = "Institutional-grade football intelligence";
+export const PRODUCT_NAME = "Knuckle";
+export const PRODUCT_TAGLINE = "Football intelligence, sharpened.";

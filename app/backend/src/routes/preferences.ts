@@ -27,6 +27,7 @@ router.put("/", async (req: AuthedRequest, res) => {
       digestEnabled: z.boolean().optional(),
       digestHourUtc: z.number().int().min(0).max(23).optional(),
       favoriteLeagueIds: z.array(z.string()).max(32).optional(),
+      favoriteTeamIds: z.array(z.string()).max(48).optional(),
       reducedMotion: z.boolean().optional(),
       onboardingStep: z.number().int().min(0).max(5).optional(),
       onboardingCompleted: z.boolean().optional(),
@@ -45,12 +46,15 @@ router.put("/", async (req: AuthedRequest, res) => {
   const data: Record<string, unknown> = {};
   if (body.data.digestHourUtc !== undefined) data.digestHourUtc = body.data.digestHourUtc;
   if (body.data.favoriteLeagueIds) data.favoriteLeagueIds = body.data.favoriteLeagueIds;
+  if (body.data.favoriteTeamIds) data.favoriteTeamIds = body.data.favoriteTeamIds;
   if (body.data.reducedMotion !== undefined) data.reducedMotion = body.data.reducedMotion;
   if (body.data.onboardingStep !== undefined) data.onboardingStep = body.data.onboardingStep;
   if (body.data.digestEnabled !== undefined) data.digestEnabled = body.data.digestEnabled;
-  if (body.data.onboardingCompleted) {
+  if (body.data.onboardingCompleted === true) {
     data.onboardingCompletedAt = new Date();
     data.onboardingStep = 5;
+  } else if (body.data.onboardingCompleted === false) {
+    data.onboardingCompletedAt = null;
   }
 
   const prefs = await prisma.userPreferences.upsert({

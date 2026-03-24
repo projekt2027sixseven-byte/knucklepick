@@ -1,6 +1,10 @@
 # Railway — https://railway.app
-# Create a Web Service from this repo, attach Postgres (and optional Redis), then set env vars from `.env.example`.
-# Or deploy from the included Dockerfile (set `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `FRONTEND_URL`, etc.).
+# Service root: repository root (not app/backend). Uses Nixpacks build below; or deploy the root Dockerfile.
+# Env: see `.env.example` and README (DATABASE_URL, DIRECT_URL, JWT_SECRET, FRONTEND_URL, etc.).
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm ci && npx prisma generate --schema app/db/prisma/schema.prisma && npm run build -w @match-oracle/backend"
 
 [deploy]
 startCommand = "npm run start -w @match-oracle/backend"

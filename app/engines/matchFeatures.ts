@@ -69,7 +69,9 @@ export function buildMatchFeatureVector(params: {
 }
 
 export function leagueBaselineGoals(f: MatchFeatureVector): number {
-  return DEFAULT_LEAGUE_BASELINE * f.leagueStrengthIndex;
+  const base = DEFAULT_LEAGUE_BASELINE * f.leagueStrengthIndex;
+  const env = impliedScoringIntensity(f.implied);
+  return base * (0.94 + 0.12 * env);
 }
 
 /** Implied “scoring environment” from prices: higher when long-shot prices suggest open game. */

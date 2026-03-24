@@ -103,6 +103,7 @@ router.get("/me", requireAuth, async (req: AuthedRequest, res) => {
     email: user.email,
     name: user.name,
     role: user.role,
+    hasStripeCustomer: Boolean(user.stripeCustomerId),
     preferences: user.preferences,
     entitlements,
     engagement: {

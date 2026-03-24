@@ -24,20 +24,29 @@ function normalizeGA(ga: number): number {
 }
 
 export function homeSideStrength(f: MatchFeatureVector, w: MatchFeatureVector["weights"]): TeamStrength {
+  const gap = clamp(f.strengthGap, -2.8, 2.8);
+  /** Positive gap ⇒ home roster/table edge — tilt attack upward for home, down for away. */
+  const skew = gap * 0.072;
   const atk =
     w.form * normalizeForm(f.formHome) +
     w.xg * normalizeXG(f.xgHome) +
-    w.odds * (f.implied.home * 2.2 - 0.9);
-  const def = w.defense * normalizeGA(f.goalsAgainstHome);
+    w.odds * (f.implied.home * 2.2 - 0.9) +
+    skew * (0.45 * w.form + 0.35 * w.xg + 0.2 * w.odds);
+  const def =
+    w.defense * normalizeGA(f.goalsAgainstHome) + (f.hasStats ? skew * 0.12 : skew * 0.06);
   return { attack: atk, defense: def };
 }
 
 export function awaySideStrength(f: MatchFeatureVector, w: MatchFeatureVector["weights"]): TeamStrength {
+  const gap = clamp(f.strengthGap, -2.8, 2.8);
+  const skew = gap * 0.072;
   const atk =
     w.form * normalizeForm(f.formAway) +
     w.xg * normalizeXG(f.xgAway) +
-    w.odds * (f.implied.away * 2.2 - 0.9);
-  const def = w.defense * normalizeGA(f.goalsAgainstAway);
+    w.odds * (f.implied.away * 2.2 - 0.9) -
+    skew * (0.45 * w.form + 0.35 * w.xg + 0.2 * w.odds);
+  const def =
+    w.defense * normalizeGA(f.goalsAgainstAway) - (f.hasStats ? skew * 0.12 : skew * 0.06);
   return { attack: atk, defense: def };
 }
 

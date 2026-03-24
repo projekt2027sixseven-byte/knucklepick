@@ -63,12 +63,21 @@ export function buildScoreLattice(
 export function pickExactAndAltScore(lattice: ScoreEngineResult): {
   exactScore: string;
   altScore: string;
+  /** Share of joint mass on the modal scoreline (same lattice as 1X2). */
+  topMassShare: number;
+  /** Top vs runner-up cell mass — low values mean the goal model is diffuse. */
+  massRatioTopTwo: number;
 } {
   const top = lattice.topScorelines[0]!;
   const second = lattice.topScorelines[1] ?? top;
+  const sumP = lattice.matrix.reduce((a, c) => a + c.p, 0) || 1;
+  const topMassShare = top.p / sumP;
+  const massRatioTopTwo = top.p / Math.max(second.p, 1e-9);
   return {
     exactScore: `${top.home}-${top.away}`,
     altScore: `${second.home}-${second.away}`,
+    topMassShare,
+    massRatioTopTwo,
   };
 }
 

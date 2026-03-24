@@ -21,11 +21,17 @@ const envSchema = z
     FOOTBALL_API_KEY: z.string().optional(),
     ODDS_API_KEY: z.string().optional(),
     MOCK_DATA_MODE: boolish,
+    /** Instant kill-switch — returns 503 for API routes (except health/ready). Also see AppConfig MAINTENANCE_MODE. */
+    MAINTENANCE_MODE: boolish,
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     STRIPE_PRICE_STARTER: z.string().optional(),
     STRIPE_PRICE_PRO: z.string().optional(),
     STRIPE_PRICE_ULTIMATE: z.string().optional(),
+    /** Resend API for digest emails (https://resend.com). When unset, digest fan-out logs but does not send mail. */
+    RESEND_API_KEY: z.string().optional(),
+    /** Verified sender in Resend, e.g. Knuckle <digest@yourdomain.com> */
+    DIGEST_FROM_EMAIL: z.string().optional(),
     /** Comma-separated extra CORS origins (e.g. Vercel preview URLs). */
     CORS_ORIGINS: z.string().optional(),
     /** Set to "false" or "0" to disable cron jobs (e.g. secondary instances). Default: enabled. */
@@ -112,4 +118,31 @@ export function parseExtraCorsOrigins(env: Env): string[] {
   return env.CORS_ORIGINS.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * Adds the apex ↔ `www.` variant of `FRONTEND_URL` so browser API calls succeed whether
+ * visitors use `https://example.com` or `https://www.example.com` (set `FRONTEND_URL` to your canonical host).
+ * Skips localhost. Merged with `CORS_ORIGINS` in the API CORS allow-list.
+ */
+export function expandFrontendCorsOrigins(primary: string): string[] {
+  const out = new Set<string>([primary.replace(/\/$/, "")]);
+  try {
+    const u = new URL(primary);
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") {
+      return [...out];
+    }
+    const port = u.port ? `:${u.port}` : "";
+    const proto = u.protocol;
+    if (host.startsWith("www.")) {
+      const apex = host.slice(4);
+      if (apex) out.add(`${proto}//${apex}${port}`);
+    } else {
+      out.add(`${proto}//www.${host}${port}`);
+    }
+  } catch {
+    /* ignore malformed URL */
+  }
+  return [...out];
 }

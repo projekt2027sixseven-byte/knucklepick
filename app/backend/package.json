@@ -6,8 +6,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "tsx src/index.ts",
-    "db:seed": "tsx src/seed.ts",
-    "postinstall": "prisma generate --schema ../db/prisma/schema.prisma"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
@@ -25,6 +26,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/supertest": "^6.0.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",
@@ -33,7 +35,9 @@
     "@types/node": "^22.13.10",
     "@types/node-cron": "^3.0.11",
     "prisma": "^6.5.0",
+    "supertest": "^7.0.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.5"
   }
 }

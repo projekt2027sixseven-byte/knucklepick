@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { SubscriptionStatus } from "@prisma/client";
+import type { SubscriptionStatus } from "../../../db/prisma-client";
 import Stripe from "stripe";
 import { z } from "zod";
 import { loadEnv } from "../../../config/env";
@@ -7,6 +7,7 @@ import { prisma } from "../prisma";
 import type { AuthedRequest } from "../middleware/authMiddleware";
 import { requireAuth } from "../middleware/authMiddleware";
 import { log } from "../lib/logger";
+import { digestMailConfigured } from "../../../services/digestMail";
 
 const router = Router();
 
@@ -87,6 +88,46 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription): Promise<voi
   });
 }
 
+/** Public capability flags for pricing / account UI (no secrets). */
+router.get("/capabilities", (_req, res) => {
+  const env = loadEnv();
+  const stripe = getStripe();
+  const hasPrice = Boolean(env.STRIPE_PRICE_STARTER || env.STRIPE_PRICE_PRO || env.STRIPE_PRICE_ULTIMATE);
+  res.json({
+    stripe: Boolean(stripe),
+    subscriptionCheckout: Boolean(stripe && hasPrice),
+    customerPortal: Boolean(stripe),
+    digestEmail: digestMailConfigured(),
+  });
+});
+
+router.post("/portal", requireAuth, async (req: AuthedRequest, res) => {
+  const stripe = getStripe();
+  const env = loadEnv();
+  if (!stripe) {
+    res.status(503).json({ error: "Stripe is not configured on the server.", code: "STRIPE_NOT_CONFIGURED" });
+    return;
+  }
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user?.stripeCustomerId) {
+    res.status(400).json({
+      error: "Subscribe once from Pricing to create a billing profile before opening the customer portal.",
+      code: "NO_STRIPE_CUSTOMER",
+    });
+    return;
+  }
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: `${env.FRONTEND_URL}/account`,
+    });
+    res.json({ url: session.url });
+  } catch (e) {
+    log.error("stripe_portal_failed", { err: String(e) });
+    res.status(503).json({ error: "Could not open billing portal. Check Stripe dashboard configuration." });
+  }
+});
+
 router.post("/checkout", requireAuth, async (req: AuthedRequest, res) => {
   const stripe = getStripe();
   const env = loadEnv();
@@ -96,7 +137,10 @@ router.post("/checkout", requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   if (!stripe) {
-    res.status(503).json({ error: "Stripe not configured" });
+    res.status(503).json({
+      error: "Payments are not configured. Set STRIPE_SECRET_KEY and price IDs on the API server.",
+      code: "STRIPE_NOT_CONFIGURED",
+    });
     return;
   }
   const priceMap: Record<string, string | undefined> = {
@@ -106,7 +150,10 @@ router.post("/checkout", requireAuth, async (req: AuthedRequest, res) => {
   };
   const priceId = priceMap[body.data.planSlug];
   if (!priceId) {
-    res.status(503).json({ error: "Stripe price IDs not configured for this plan" });
+    res.status(503).json({
+      error: `Stripe price ID missing for plan "${body.data.planSlug}". Set STRIPE_PRICE_${body.data.planSlug.toUpperCase()} on the API.`,
+      code: "STRIPE_PRICE_MISSING",
+    });
     return;
   }
   const user = await prisma.user.findUnique({ where: { id: req.user!.id } });

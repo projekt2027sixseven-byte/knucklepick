@@ -6,75 +6,78 @@ export function SiteFooter() {
   const support = getSupportEmail();
 
   return (
-    <footer className="mt-auto border-t border-white/10 bg-black/25 backdrop-blur-sm">
+    <footer className="mt-auto border-t border-white/[0.08] bg-dream-ink/50 backdrop-blur-md">
       <div className="mx-auto max-w-6xl px-4 py-10 lg:px-6">
         <div className="grid gap-8 md:grid-cols-4 md:gap-10">
           <div className="md:col-span-1">
-            <p className="text-xs uppercase tracking-[0.25em] text-cyan-300/70">{PRODUCT_NAME}</p>
-            <p className="text-sm text-slate-400 mt-3 leading-relaxed">
-              Premium probability intelligence for serious desks — process, calibration, and governance, not hype.
+            <p className="font-display text-xs font-bold uppercase tracking-[0.28em] text-fuchsia-300/75">{PRODUCT_NAME}</p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-400">
+              Football match intelligence: probabilities, risk flags, and a decision deck — for analysis, not tips.
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Product</p>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
-                <Link href="/dashboard" className="text-slate-400 hover:text-cyan-200 transition-colors">
-                  Intelligence grid
+                <Link href="/dashboard" className="text-slate-400 transition-colors hover:text-fuchsia-300">
+                  Intelligence deck
                 </Link>
               </li>
               <li>
-                <Link href="/insights" className="text-slate-400 hover:text-cyan-200 transition-colors">
-                  Trust center
+                <Link href="/insights" className="text-slate-400 transition-colors hover:text-fuchsia-300">
+                  Signal center
                 </Link>
               </li>
               <li>
-                <Link href="/pricing" className="text-slate-400 hover:text-cyan-200 transition-colors">
+                <Link href="/pricing" className="text-slate-400 transition-colors hover:text-fuchsia-300">
                   Plans &amp; billing
                 </Link>
               </li>
               <li>
-                <Link href="/account" className="text-slate-400 hover:text-cyan-200 transition-colors">
+                <Link href="/account" className="text-slate-400 transition-colors hover:text-fuchsia-300">
                   Account
                 </Link>
               </li>
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Legal</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Legal</p>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
-                <Link href="/privacy" className="text-slate-400 hover:text-cyan-200 transition-colors">
+                <Link href="/privacy" className="text-slate-400 transition-colors hover:text-fuchsia-300">
                   Privacy
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="text-slate-400 hover:text-cyan-200 transition-colors">
+                <Link href="/terms" className="text-slate-400 transition-colors hover:text-fuchsia-300">
                   Terms of use
                 </Link>
               </li>
             </ul>
-            <p className="text-xs text-slate-500 mt-4 leading-relaxed">
+            <p className="mt-4 text-xs leading-relaxed text-slate-600">
               Analytical use only. No outcome guarantees. Comply with applicable laws in your jurisdiction.
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Support</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Support</p>
             {support ? (
-              <p className="text-sm text-slate-400 mt-3">
-                <a href={`mailto:${support}`} className="text-cyan-300/90 hover:text-cyan-200 font-medium">
+              <p className="mt-3 text-sm text-slate-400">
+                <a
+                  href={`mailto:${support}`}
+                  className="font-medium text-fuchsia-300/90 transition-colors hover:text-fuchsia-200"
+                >
                   {support}
                 </a>
               </p>
             ) : (
-              <p className="text-sm text-slate-500 mt-3 leading-relaxed">
-                Set <span className="font-mono text-[11px] text-slate-400">NEXT_PUBLIC_SUPPORT_EMAIL</span> on your
-                deployment for a public inbox link.
+              <p className="mt-3 text-sm leading-relaxed text-slate-500">
+                For this release, reach the operator directly. To show a mail link here, set{" "}
+                <span className="font-mono text-[11px] text-slate-500">NEXT_PUBLIC_SUPPORT_EMAIL</span> in Vercel.
               </p>
             )}
           </div>
         </div>
-        <p className="text-center text-[11px] text-slate-600 mt-10 pt-6 border-t border-white/5">
+        <p className="mt-10 border-t border-white/[0.06] pt-6 text-center text-[11px] text-slate-600">
           © {new Date().getFullYear()} {PRODUCT_NAME}. All rights reserved.
         </p>
       </div>

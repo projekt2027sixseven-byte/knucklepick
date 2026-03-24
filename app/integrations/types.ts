@@ -1,3 +1,6 @@
+import type { OddsBand } from "../engines/oddsContext";
+import type { TotalGoalsBand } from "../utils/ouInference";
+
 export type NormalizedTeam = {
   externalId: string;
   name: string;
@@ -30,6 +33,13 @@ export type NormalizedOdds = {
   under25?: number;
   bttsYes?: number;
   bttsNo?: number;
+  /** Set when matched to a book event; used for gating predictions. */
+  matchQuality?: number;
+  /** `book_matched` = real alignment; `synthetic` = filler (must not produce “live” predictions). */
+  oddsSource?: "book_matched" | "synthetic";
+  /** Book event team names after orientation alignment (same order as fixture home/away). */
+  bookEventHome?: string;
+  bookEventAway?: string;
 };
 
 export type NormalizedTeamStats = {
@@ -39,6 +49,10 @@ export type NormalizedTeamStats = {
   xGAgainst: number;
   goalsForAvg: number;
   goalsAgainstAvg: number;
+  /** Last matches form string from API (e.g. WWDLW) when available */
+  formRecent?: string;
+  /** League table rank when standings were fetched */
+  leagueRank?: number;
 };
 
 export type HistoricalMatchForSimilarity = {
@@ -52,6 +66,10 @@ export type HistoricalMatchForSimilarity = {
   strengthGap: number;
   homeForm: number;
   awayForm: number;
+  /** Pre-match 1X2 structural bucket (for cohort matching). */
+  oddsBand: OddsBand;
+  /** Realized total-goals bucket (ex-post). */
+  totalBand: TotalGoalsBand;
   result1x2: "HOME" | "DRAW" | "AWAY";
   totalGoals: number;
   homeGoals: number;

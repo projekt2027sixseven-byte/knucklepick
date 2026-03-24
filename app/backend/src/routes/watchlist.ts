@@ -4,6 +4,7 @@ import { prisma } from "../prisma";
 import type { AuthedRequest } from "../middleware/authMiddleware";
 import { requireAuth } from "../middleware/authMiddleware";
 import { countWatchlist, getUserPlanLimits } from "../services/subscriptionService";
+import { parseResourceId, resourceIdSchema } from "../validation/ids";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get("/", async (req: AuthedRequest, res) => {
 router.post("/", async (req: AuthedRequest, res) => {
   const body = z
     .object({
-      matchId: z.string().min(1),
+      matchId: resourceIdSchema,
       note: z.string().max(280).optional(),
     })
     .safeParse(req.body);
@@ -62,9 +63,14 @@ router.post("/", async (req: AuthedRequest, res) => {
 });
 
 router.delete("/:matchId", async (req: AuthedRequest, res) => {
-  const raw = req.params.matchId;
-  const matchId = Array.isArray(raw) ? raw[0] : raw;
-  await prisma.watchlistItem.deleteMany({ where: { userId: req.user!.id, matchId } });
+  const parsed = parseResourceId(req.params.matchId);
+  if (!parsed.ok) {
+    res.status(400).json({ error: "Invalid match id" });
+    return;
+  }
+  await prisma.watchlistItem.deleteMany({
+    where: { userId: req.user!.id, matchId: parsed.id },
+  });
   res.json({ ok: true });
 });
 

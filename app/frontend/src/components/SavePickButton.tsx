@@ -37,11 +37,17 @@ export function SavePickButton({ matchId }: { matchId: string }) {
         type="button"
         disabled={busy}
         onClick={() => save()}
-        className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50"
+        className="rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-white hover:bg-white/[0.06] hover:border-knuckle-primary/30 disabled:opacity-50 transition-all"
       >
         {busy ? "Saving…" : "Save snapshot"}
       </button>
-      {msg ? <span className="text-xs text-slate-400">{msg}</span> : null}
+      {msg ? (
+        <span
+          className={`text-xs max-w-[14rem] ${msg === "Saved to vault" ? "text-emerald-300/90" : "text-rose-300/90"}`}
+        >
+          {msg}
+        </span>
+      ) : null}
     </div>
   );
 }

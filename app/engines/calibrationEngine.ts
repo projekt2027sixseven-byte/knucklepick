@@ -12,13 +12,14 @@ export type CalibrationContext = {
  * Returns α in [0,1] = weight on **model** (remainder on market).
  */
 export function adaptiveShrinkage(ctx: CalibrationContext): number {
-  const base = 0.62;
-  const dq = (1 - ctx.dataQuality01) * 0.14;
-  const vol = ctx.volatility01 * 0.1;
-  const sim = (1 - ctx.similarity01) * 0.06;
+  /** Lower α ⇒ more weight on market (1−α) — reduces overconfidence on sparse signals. */
+  const base = 0.52;
+  const dq = (1 - ctx.dataQuality01) * 0.16;
+  const vol = ctx.volatility01 * 0.12;
+  const sim = (1 - ctx.similarity01) * 0.08;
   let alpha = base - dq - vol - sim;
-  if (ctx.mockData) alpha -= 0.12;
-  return clamp(alpha, 0.28, 0.82);
+  if (ctx.mockData) alpha -= 0.14;
+  return clamp(alpha, 0.22, 0.78);
 }
 
 export function calibrateTriplet(

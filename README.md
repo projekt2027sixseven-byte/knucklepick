@@ -1,6 +1,6 @@
-# Oracle Pitch (Match Oracle Elite AI)
+# Knuckle — Football intelligence SaaS
 
-Founder-grade monorepo for a premium football intelligence platform: transparent modeling, trust indexing, watchlists, vault snapshots, digest hooks, Redis-aware caching (with in-memory fallback), Stripe monetization, and a control-room UX.
+Production-grade monorepo for **Knuckle**: multi-layer predictions (Poisson lattice, calibration, market-structure similarity), trust and risk governance, watchlists, vault snapshots, digest hooks, Redis-aware caching (in-memory fallback), Stripe subscriptions, and a premium control-room UX.
 
 ## Structure
 
@@ -33,12 +33,14 @@ npm run dev
 
 - Frontend: **`npm run dev -w app/frontend`** runs `node scripts/dev.cjs`, which tries ports **3001 → 3002 → 3500 → 3456 → 4321** on **127.0.0.1**. If the console shows a port other than 3001, set `FRONTEND_URL=http://localhost:<that-port>` in the root `.env`. For a fixed port: `npm run dev:3001 -w app/frontend`.
 - Backend: `http://localhost:4000/api/health` and `http://localhost:4000/api/ready` (ready checks the database).
-- Copy `app/frontend/.env.example` to `app/frontend/.env.local` and set `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_APP_URL` (or rely on defaults for localhost).
+- Copy `app/frontend/.env.example` to `app/frontend/.env.local`. For local dev, default `NEXT_PUBLIC_API_URL` targets the API; alternatively use `BACKEND_PROXY_URL` with `NEXT_PUBLIC_API_URL` unset (same-origin `/api` rewrites). Set `NEXT_PUBLIC_APP_URL` if needed.
 
 ### Seeded admin (development only)
 
-- Email: `admin@matchoracle.local`
+- Email: `admin@knuckle.local`
 - Password: `Admin12345678!`
+
+If you ran an older seed that created `admin@matchoracle.local`, either sign in with that email or run `npm run db:seed` again after pulling (the seed upserts by email).
 
 Run **Admin → Data pipeline** once to populate mock fixtures and predictions.
 
@@ -71,12 +73,16 @@ Run **Admin → Data pipeline** once to populate mock fixtures and predictions.
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_API_URL` | Backend base URL (`https://your-api.up.railway.app`). |
+| `NEXT_PUBLIC_API_URL` | Optional. If set, the browser calls this API URL directly (backend must allow CORS for your site origin; set `FRONTEND_URL` on the API). |
+| `BACKEND_PROXY_URL` | **Vercel (server-only).** If `NEXT_PUBLIC_API_URL` is **unset**, Next.js rewrites same-origin `/api/*` to this URL so the browser never needs a public API URL or CORS from the user’s machine. |
 | `NEXT_PUBLIC_APP_URL` | Canonical public site URL for metadata. On Vercel, `VERCEL_URL` is used if unset. |
+| `NEXT_PUBLIC_SUPPORT_EMAIL` | Optional footer contact. |
 
-Never put secrets in `NEXT_PUBLIC_*` variables.
+Never put secrets in `NEXT_PUBLIC_*` variables. `BACKEND_PROXY_URL` is not exposed to the client bundle.
 
 ## Production deployment
+
+**Operator checklist (custom domain + Railway + Vercel):** see [`docs/PUBLICATION.md`](docs/PUBLICATION.md). The API CORS allow-list includes both `www` and apex variants of `FRONTEND_URL` automatically.
 
 ### CI
 
@@ -93,7 +99,7 @@ GitHub Actions runs `npm ci` and `npm run verify` on pushes and pull requests to
 
 1. Build from the repository root: `docker build -t match-oracle-api .`
 2. Run with real env vars (at minimum `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `FRONTEND_URL`; `PORT` if your host does not inject it).
-3. The image runs `npm run start -w @match-oracle/backend` (Express + `tsx`). Prisma generate uses placeholder URLs during `npm ci`; at runtime the app uses your live `DATABASE_URL`.
+3. The image runs `npm run start -w @match-oracle/backend` (Express + `tsx`). The Dockerfile runs `npm ci --include=dev` so the Prisma CLI is available at build time; at runtime the app uses your live `DATABASE_URL`.
 
 ### Database
 
@@ -126,7 +132,10 @@ See `render.yaml` as a starting blueprint. It provisions a Postgres instance and
 2. Set **Root Directory** to `app/frontend` (required). If it is left as the repository root, the install/build steps will not find the workspace and the deployment will fail.
 3. The included `app/frontend/vercel.json` runs `npm install --prefix ../..` and `npm run build --prefix ../.. -w @match-oracle/frontend` so the monorepo root `package-lock.json` is used without fragile `cd` paths.
 4. Use **Node.js 20** (see repo `.nvmrc`); Vercel picks this up automatically in most projects.
-5. Set `NEXT_PUBLIC_API_URL` to your public API URL. Optionally set `NEXT_PUBLIC_APP_URL`; otherwise `VERCEL_URL` is used for metadata on preview/production.
+5. **Connect the API (pick one):**
+   - **Recommended (no browser CORS to Railway):** Add **`BACKEND_PROXY_URL`** = your API origin (e.g. `https://your-api.up.railway.app`) in Vercel **Environment Variables** (Production + Preview). Do **not** set `NEXT_PUBLIC_API_URL`. The app will call `/api/...` on the same host; Next rewrites to your backend.
+   - **Direct API URL:** Set **`NEXT_PUBLIC_API_URL`** = your API origin. Then set **`FRONTEND_URL`** on the backend to your Vercel site (e.g. `https://your-app.vercel.app`) and add the same origin to **`CORS_ORIGINS`** if you use preview URLs.
+6. Optionally set **`NEXT_PUBLIC_APP_URL`** to your custom domain; otherwise **`VERCEL_URL`** is used for metadata.
 
 ### Stripe
 
@@ -141,8 +150,9 @@ Scheduled tasks run inside the **backend** process (`node-cron`). Run **one** AP
 
 ## API highlights
 
-- `GET /api/health` — Liveness
+- `GET /api/health` — Liveness (includes `maintenance` when `MAINTENANCE_MODE` env is set)
 - `GET /api/ready` — Readiness (DB)
+- `GET /api/meta/leagues` — League IDs/names for dashboard filters (cached ~2m)
 - `GET /api/matches` — Intelligence grid (optional auth for watchlist flags, ~90s cache)
 - `GET /api/matches/:id` — Authenticated detail with metering + entitlements
 - `GET|POST|DELETE /api/watchlist` — Watchlist
@@ -172,6 +182,7 @@ Premium fields lock once the daily quota is exhausted. Entitlements are enforced
 - **Prisma / `DIRECT_URL`:** Must be set in the environment where you run `prisma migrate` / `generate` if `directUrl` is present in `schema.prisma` (duplicate `DATABASE_URL` when not using a pooler).
 - **Stripe webhook 400:** Check `STRIPE_WEBHOOK_SECRET` and that the route receives **raw** body (not parsed JSON).
 - **Rate limits (429):** Defaults are global 120/min and stricter limits on `/api/auth/*`. Behind a proxy, ensure `TRUST_PROXY` is enabled in production.
+- **Prisma generate EPERM on Windows:** If `npm run verify` fails renaming `query_engine-windows.dll.node`, stop processes holding the file (e.g. `npm run dev`, Prisma Studio), then rerun. Backend/frontend `tsc` / `next build` alone validate TypeScript without regenerating the engine.
 
 ## Verification
 
@@ -180,5 +191,16 @@ npm run verify
 ```
 
 Runs Prisma generate and full workspace build (backend `tsc` + frontend `next build`).
-#   k n u c k l e p i c k  
- 
+
+With the API running locally:
+
+```bash
+npm run smoke
+```
+
+Hits `/api/health`, `/api/ready`, and `/api/meta/leagues` (default base `http://127.0.0.1:4000`).
+
+## Live data notes
+
+- **API-Football** (`FOOTBALL_API_KEY`) supplies daily fixtures; **The Odds API** (`ODDS_API_KEY`) supplies prices. Fixture IDs differ across providers — the backend **matches odds to fixtures by team name** (fuzzy) across major leagues (EPL, La Liga, Serie A, Bundesliga, Ligue 1, UCL). Unmatched fixtures fall back to **deterministic mock odds** so the pipeline never fails.
+- Set `MOCK_DATA_MODE=true` (or omit API keys) for fully synthetic end-to-end runs.

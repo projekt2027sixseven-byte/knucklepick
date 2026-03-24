@@ -19,9 +19,12 @@ export type MarketAlignment = {
   edgeScore: number;
   /** True only if at least one side clears noise + minimum edge floor. */
   meaningfulEdge: boolean;
+  /** How actionable the largest edge is after noise / thresholds. */
+  edgeQuality: "STRONG" | "MODERATE" | "WEAK" | "NONE";
 };
 
 const NOISE_FLOOR = 0.018;
+const MEANINGFUL_EDGE_DELTA = 0.015;
 
 export function analyzeMarketVsModel(
   homeOdds: number,
@@ -51,8 +54,12 @@ export function analyzeMarketVsModel(
         Math.abs(model.pAway - mkt.away)) /
         2);
 
-  const meaningfulEdge = maxEdge > NOISE_FLOOR + 0.012;
-  const edgeScore = meaningfulEdge ? maxEdge : maxEdge * 0.35;
+  const meaningfulEdge = maxEdge > NOISE_FLOOR + MEANINGFUL_EDGE_DELTA;
+  const edgeScore = meaningfulEdge ? maxEdge : maxEdge * 0.32;
+  let edgeQuality: MarketAlignment["edgeQuality"] = "NONE";
+  if (maxEdge > NOISE_FLOOR + 0.045) edgeQuality = "STRONG";
+  else if (meaningfulEdge) edgeQuality = "MODERATE";
+  else if (maxEdge > NOISE_FLOOR + 0.006) edgeQuality = "WEAK";
 
   return {
     marketProbHome: mkt.home,
@@ -68,5 +75,6 @@ export function analyzeMarketVsModel(
     disagreementL1,
     edgeScore,
     meaningfulEdge,
+    edgeQuality,
   };
 }

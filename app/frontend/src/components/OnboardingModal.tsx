@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -16,12 +16,12 @@ const steps = [
     body: "Each fixture is a full probability object — not a tip. The model outputs distributions; confidence and trust scores describe how much to lean on them.",
   },
   {
-    title: "How to use the desk",
-    body: "Start on the Intelligence grid for trust-ranked picks. Open a match for calibrated 1X2, exact score mass, similarity cohorts, and explicit NO BET when governance triggers.",
+    title: "How to use the deck",
+    body: "Start on the Deck for trust-ranked picks. Open a match for calibrated 1X2, exact score mass, similarity cohorts, and explicit NO BET when governance triggers.",
   },
   {
     title: "Build a habit",
-    body: "Pin matches to your watchlist, save vault snapshots for review, and upgrade when you want digests and deeper cohort stats.",
+    body: "Pin matches to your watchlist, save vault snapshots for review, and upgrade when you want Pro+ digests (email sends when the API has mail configured) and deeper cohort stats.",
   },
 ];
 
@@ -38,34 +38,46 @@ export function OnboardingModal() {
     queryFn: () => apiFetch<Me>("/api/auth/me", { token }),
   });
 
-  useEffect(() => {
-    if (!me.data?.preferences?.onboardingCompletedAt) {
-      setOpen(Boolean(token));
-    } else {
+  const complete = useCallback(
+    async (goDashboard: boolean) => {
+      if (!token) return;
+      try {
+        await apiFetch("/api/me/preferences", {
+          method: "PUT",
+          token,
+          body: JSON.stringify({ onboardingCompleted: true }),
+        });
+        await qc.invalidateQueries({ queryKey: ["me"] });
+      } catch {
+        /* still close so the user isn’t blocked */
+      }
       setOpen(false);
+      if (goDashboard) router.push("/dashboard");
+    },
+    [token, qc, router]
+  );
+
+  const dismissLater = useCallback(async () => {
+    await complete(false);
+  }, [complete]);
+
+  useEffect(() => {
+    if (!token) {
+      setOpen(false);
+      return;
     }
-  }, [me.data, token]);
+    if (!me.isSuccess) return;
+    setOpen(!me.data?.preferences?.onboardingCompletedAt);
+  }, [me.data, me.isSuccess, token]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") void dismissLater();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  async function complete(goDashboard: boolean) {
-    if (!token) return;
-    await apiFetch("/api/me/preferences", {
-      method: "PUT",
-      token,
-      body: JSON.stringify({ onboardingCompleted: true }),
-    });
-    await qc.invalidateQueries({ queryKey: ["me"] });
-    setOpen(false);
-    if (goDashboard) router.push("/dashboard");
-  }
+  }, [open, dismissLater]);
 
   if (!open) return null;
 
@@ -73,25 +85,25 @@ export function OnboardingModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md px-4 pb-[env(safe-area-inset-bottom)] sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md px-4 pb-[env(safe-area-inset-bottom)] sm:p-4"
       role="presentation"
-      onClick={() => setOpen(false)}
+      onClick={() => void dismissLater()}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
-        className="glass-strong max-w-lg w-full rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 space-y-5 border border-white/10 shadow-2xl shadow-black/50 max-h-[90vh] overflow-y-auto"
+        className="glass-strong max-h-[90vh] w-full max-w-lg space-y-6 overflow-y-auto rounded-t-3xl border border-fuchsia-500/25 p-6 shadow-2xl shadow-black/60 sm:rounded-[1.75rem] sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.35em] text-cyan-300/90">First session</p>
-            <h2 id="onboarding-title" className="text-xl sm:text-2xl font-semibold text-white mt-1 leading-snug">
+            <p className="font-display text-[10px] font-bold uppercase tracking-[0.35em] text-fuchsia-300">First session</p>
+            <h2 id="onboarding-title" className="text-xl sm:text-2xl font-bold text-white mt-2 leading-snug font-display">
               {s.title}
             </h2>
           </div>
-          <span className="text-xs text-slate-500 tabular-nums shrink-0">
+          <span className="text-xs text-slate-500 tabular-nums shrink-0 font-mono">
             {step + 1}/{steps.length}
           </span>
         </div>
@@ -103,8 +115,8 @@ export function OnboardingModal() {
               type="button"
               aria-label={`Step ${i + 1}`}
               onClick={() => setStep(i)}
-              className={`h-1.5 flex-1 rounded-full transition-colors ${
-                i === step ? "bg-cyan-400" : "bg-white/10"
+              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
+                i === step ? "bg-fuchsia-500 shadow-glow" : "bg-white/10"
               }`}
             />
           ))}
@@ -114,7 +126,7 @@ export function OnboardingModal() {
             <button
               type="button"
               onClick={() => setStep((x) => x + 1)}
-              className="flex-1 min-w-[140px] rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 text-slate-950 font-semibold py-3 text-sm"
+              className="btn-primary flex-1 min-w-[140px] py-3 text-sm"
             >
               Next
             </button>
@@ -123,14 +135,14 @@ export function OnboardingModal() {
               <button
                 type="button"
                 onClick={() => void complete(true)}
-                className="flex-1 min-w-[140px] rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 text-slate-950 font-semibold py-3 text-sm"
+                className="btn-primary flex-1 min-w-[140px] py-3 text-sm"
               >
                 Enter the deck
               </button>
               <button
                 type="button"
                 onClick={() => void complete(false)}
-                className="flex-1 min-w-[140px] rounded-full border border-white/20 py-3 text-sm font-medium text-slate-200 hover:bg-white/5"
+                className="flex-1 min-w-[140px] rounded-full border border-white/20 py-3 text-sm font-semibold text-slate-200 hover:bg-white/[0.06] transition-colors"
               >
                 Finish here
               </button>
@@ -138,8 +150,8 @@ export function OnboardingModal() {
           )}
           <button
             type="button"
-            onClick={() => setOpen(false)}
-            className="sm:px-4 py-3 text-sm text-slate-500 hover:text-white"
+            onClick={() => void dismissLater()}
+            className="sm:px-4 py-3 text-sm text-slate-500 hover:text-white transition-colors"
           >
             Later
           </button>

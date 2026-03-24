@@ -46,6 +46,9 @@ export type PredictionEngineInput = {
   rolling?: RollingForLambda | null;
   /** Weight of empirical λ blend (0–1). */
   empiricalBlend?: number;
+  /** Live O/U 2.5 prices — anchor total λ when present (backend only). */
+  over25?: number;
+  under25?: number;
 };
 
 export type PredictionEngineOutput = {
@@ -95,6 +98,11 @@ function normalizeTriplet(p: { pHome: number; pDraw: number; pAway: number }) {
   return { pHome: p.pHome / s, pDraw: p.pDraw / s, pAway: p.pAway / s };
 }
 
+function tripletProbMargin(p: { pHome: number; pDraw: number; pAway: number }): number {
+  const [a, b] = [p.pHome, p.pDraw, p.pAway].sort((x, y) => y - x);
+  return a - b;
+}
+
 export function runPredictionEngine(input: PredictionEngineInput): PredictionEngineOutput {
   const pool = input.historicalPool ?? syntheticHistoricalPool(200);
   const imp = impliedProbabilities(input.homeOdds, input.drawOdds, input.awayOdds);
@@ -141,6 +149,8 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
     strengthGap: input.strengthGap,
     homeForm: input.homeFormPts,
     awayForm: input.awayFormPts,
+    over25: input.over25,
+    under25: input.under25,
   });
   const sim = findSimilarMatches(curFeat, pool, 14);
 
@@ -156,7 +166,7 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
   if (simAdj.pHome >= simAdj.pDraw && simAdj.pHome >= simAdj.pAway) outcome = "HOME";
   else if (simAdj.pAway >= simAdj.pDraw && simAdj.pAway >= simAdj.pHome) outcome = "AWAY";
 
-  const { exactScore, altScore } = pickExactAndAltScore(lattice);
+  const { exactScore, altScore, topMassShare, massRatioTopTwo } = pickExactAndAltScore(lattice);
   const totalXG = lambdaHome + lambdaAway;
 
   const bttsPrediction: PredictionEngineOutput["bttsPrediction"] =
@@ -175,17 +185,25 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
     disagreementL1: marketFull.disagreementL1,
   });
 
-  const { confidence, modelConfidence } = compositeConfidence({
+  const probMargin = tripletProbMargin(simAdj);
+
+  let { confidence, modelConfidence } = compositeConfidence({
     dataQualityScore: dataQualityScore / 100,
     marketAlignmentScore: marketFull.alignmentScore,
     similarityScore: sim.similarityScore,
     volatilityScore,
     modelSpread,
     uncertaintyIndex: uncertainty.uncertaintyIndex,
+    probMargin,
+    disagreementL1: marketFull.disagreementL1,
   });
 
   const mktMax = Math.max(marketFull.marketProbHome, marketFull.marketProbDraw, marketFull.marketProbAway);
   const trap = detectTrap(mktMax, modelConfidence, marketFull.disagreementL1);
+  if (trap.isTrap) {
+    confidence = clamp(confidence * 0.8, 0, 0.78);
+    modelConfidence = clamp(modelConfidence * 0.85, 0, 0.8);
+  }
 
   const conflicting =
     (outcome === "HOME" && marketFull.marketProbAway > 0.38) ||
@@ -207,15 +225,30 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
     1 - modelWeight
   );
 
-  const thinSimilarity = sim.stats.sampleSize < 6 || sim.similarityScore < 34;
+  const thinSimilarity = sim.stats.sampleSize < 6 || sim.similarityScore < 36;
+  const weakSeparation = probMargin < 0.052 && modelSpread < 51;
+  const diffuseScoreline =
+    topMassShare < 0.058 && massRatioTopTwo < 1.72 && probMargin < 0.062;
+  const marketModelTension =
+    marketFull.disagreementL1 > 0.54 && probMargin < 0.075 && marketFull.edgeQuality !== "STRONG";
+  const conflictBlock =
+    conflicting &&
+    (probMargin < 0.064 || sim.similarityScore < 43 || marketFull.edgeQuality === "NONE");
   const noBet =
-    confidence < 0.36 ||
-    uncertainty.uncertaintyIndex > 80 ||
-    volatilityScore > 76 ||
-    dataQualityScore < 44 ||
-    (conflicting && sim.similarityScore < 40) ||
+    confidence < 0.44 ||
+    uncertainty.uncertaintyIndex > 72 ||
+    volatilityScore > 70 ||
+    dataQualityScore < 48 ||
+    (conflicting && sim.similarityScore < 42) ||
     thinSimilarity ||
-    (!marketFull.meaningfulEdge && Math.abs(marketFull.valueScore) < 0.025 && sim.similarityScore < 48);
+    weakSeparation ||
+    diffuseScoreline ||
+    marketModelTension ||
+    conflictBlock ||
+    (trap.isTrap && probMargin < 0.068) ||
+    (!marketFull.meaningfulEdge &&
+      Math.abs(marketFull.valueScore) < 0.028 &&
+      sim.similarityScore < 50);
 
   const riskLevel = mapRisk(volatilityScore, marketFull.valueScore, noBet);
 
@@ -230,26 +263,32 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
   const scenarios = buildScenarios(lattice, lambdaHome, lambdaAway, fav);
 
   const edgeNote = marketFull.meaningfulEdge
-    ? `Largest raw edge ${(marketFull.valueScore * 100).toFixed(1)}% on ${marketFull.valueSide}.`
-    : `Edges vs market are within noise (${(marketFull.valueScore * 100).toFixed(1)}% max); down-weighted for value display.`;
+    ? `Largest raw edge ${(marketFull.valueScore * 100).toFixed(1)}% on ${marketFull.valueSide} (${marketFull.edgeQuality} tier vs noise floor).`
+    : `No robust edge vs de-vigged 1X2 (${(marketFull.valueScore * 100).toFixed(1)}% max; ${marketFull.edgeQuality}).`;
+
+  const ouNote =
+    input.over25 && input.under25
+      ? `O/U 2.5 prices folded into total λ (book over ${input.over25.toFixed(2)} / under ${input.under25.toFixed(2)}).`
+      : "O/U 2.5 not available — total intensity from 1X2 shape + team features only.";
 
   const empNote =
     (input.empiricalBlend ?? 0) > 0.05 && input.rolling
       ? `Empirical blend ${((input.empiricalBlend ?? 0) * 100).toFixed(0)}% from rolling GF/GA (n≈${Math.min(input.rolling.nHome, input.rolling.nAway)}).`
-      : "Empirical blend off (thin history) — λ from features + market priors.";
+      : "Empirical blend off (thin history) — λ from form/xG/defense + strength gap + market priors.";
 
   const reasoningParts = [
-    `Structural lean ${outcome} (calibrated triplet; retained ${(modelWeight * 100).toFixed(0)}% model mass vs implied prices).`,
+    `Pick ${outcome}: top calibrated mass ${(Math.max(simAdj.pHome, simAdj.pDraw, simAdj.pAway) * 100).toFixed(1)}% with ${(probMargin * 100).toFixed(1)}pp separation vs runner-up; ${(modelWeight * 100).toFixed(0)}% structural model mass retained before market shrink.`,
+    `Strength gap from standings/form tilts attack/defense; ${ouNote}`,
     empNote,
-    `Expected goals: ${lambdaHome.toFixed(2)} vs ${lambdaAway.toFixed(2)} (total ${totalXG.toFixed(2)}); Dixon–Coles ρ=${lattice.rho.toFixed(3)} on the score lattice.`,
-    `Modal scoreline ${exactScore} (alt ${altScore}) from top joint masses, not independent guesses.`,
+    `λ_home=${lambdaHome.toFixed(2)}, λ_away=${lambdaAway.toFixed(2)} (Σ=${totalXG.toFixed(2)}); Dixon–Coles ρ=${lattice.rho.toFixed(3)}.`,
+    `Exact line ${exactScore} (alt ${altScore}) is the lattice mode (top cell mass ${(topMassShare * 100).toFixed(1)}%; headroom ${massRatioTopTwo.toFixed(2)}× vs next).`,
     `BTTS P≈${(lattice.bttsProb * 100).toFixed(0)}%; P(over 2.5)≈${(lattice.pOver25 * 100).toFixed(0)}%.`,
-    `Market alignment ${marketFull.alignmentScore.toFixed(0)}/100; disagreement L1=${marketFull.disagreementL1.toFixed(2)}. ${edgeNote}`,
-    `Similarity cohort n=${sim.stats.sampleSize} (structural): H/D/A ${sim.stats.winRateHome.toFixed(0)}% / ${sim.stats.winRateDraw.toFixed(0)}% / ${sim.stats.winRateAway.toFixed(0)}%; BTTS≈${sim.stats.bttsPct.toFixed(0)}%; O2.5≈${sim.stats.over25Pct.toFixed(0)}%.`,
-    trap.isTrap ? trap.reason! : "No elevated trap signature under current thresholds.",
+    `Market vs model: alignment ${marketFull.alignmentScore.toFixed(0)}/100; L1=${marketFull.disagreementL1.toFixed(2)}. ${edgeNote}`,
+    `Cohort n=${sim.stats.sampleSize}, label ${sim.stats.similarityStrengthLabel}: H/D/A ${sim.stats.winRateHome.toFixed(0)}% / ${sim.stats.winRateDraw.toFixed(0)}% / ${sim.stats.winRateAway.toFixed(0)}%; upset rate ${sim.stats.upsetFrequencyPct.toFixed(0)}%.`,
+    trap.isTrap ? trap.reason! : "No trap signature vs current thresholds.",
     noBet
-      ? "NO BET: uncertainty, thin cohort, or policy gates triggered."
-      : "Within policy gates for actionable read (still subject to bankroll discipline).",
+      ? "NO BET: weak separation, diffuse score mass, model–market tension, thin cohort, or policy gates."
+      : "Signals clear enough for a ranked read — edge tier and cohort quality still cap stake sizing.",
   ];
 
   const factors: PredictionEngineOutput["factors"] = [
@@ -272,7 +311,13 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
       name: "Attack/defense + home adv",
       weight: input.weights.form + input.weights.xg + input.weights.defense,
       contribution: clamp((goalOut.homeStrength.attack + goalOut.awayStrength.attack) / 4, 0, 1),
-      detail: `Baseline μ≈${goalOut.baseline.toFixed(2)} goals`,
+      detail: `μ≈${goalOut.baseline.toFixed(2)}; strength-gap tilt applied`,
+    },
+    {
+      name: "O/U 2.5 anchor",
+      weight: input.over25 && input.under25 ? 0.14 : 0,
+      contribution: input.over25 && input.under25 ? 0.75 : 0.2,
+      detail: ouNote,
     },
     {
       name: "Market calibration",
@@ -288,7 +333,7 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
     },
   ];
 
-  const trustIndex = computeTrustIndex({
+  let trustIndex = computeTrustIndex({
     dataQualityScore,
     marketAlignmentScore: marketFull.alignmentScore,
     similarityScore: sim.similarityScore,
@@ -296,6 +341,10 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
     mockData: input.mockData,
     uncertaintyIndex: uncertainty.uncertaintyIndex,
   });
+  if (marketFull.edgeQuality === "NONE" || marketFull.edgeQuality === "WEAK") {
+    trustIndex = clamp(trustIndex - (marketFull.edgeQuality === "NONE" ? 10 : 5), 8, 98);
+  }
+  if (probMargin < 0.06) trustIndex = clamp(trustIndex - 6, 8, 98);
 
   const goalsBand = totalGoalsBand(lambdaHome, lambdaAway);
   const methodology = buildMethodologyBullets({
@@ -305,6 +354,7 @@ export function runPredictionEngine(input: PredictionEngineInput): PredictionEng
     modelVersion: MODEL_VERSION,
     dixonColesRho: lattice.rho,
     empiricalBlend: input.empiricalBlend,
+    ouAnchored: Boolean(input.over25 && input.under25),
   });
 
   return {

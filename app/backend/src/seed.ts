@@ -1,7 +1,7 @@
 import path from "path";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../db/prisma-client";
 import { applyDirectUrlToProcessEnv } from "../../config/env";
 
 dotenv.config({ path: path.resolve(process.cwd(), "../../.env") });
@@ -81,7 +81,7 @@ async function main() {
     });
   }
 
-  const adminEmail = "admin@matchoracle.local";
+  const adminEmail = "admin@knuckle.local";
   const adminPass = "Admin12345678!";
   const hash = await bcrypt.hash(adminPass, 12);
   const starter = await prisma.plan.findUniqueOrThrow({ where: { slug: "starter" } });
@@ -161,7 +161,7 @@ async function main() {
     });
   }
 
-  console.log("Seed complete. Admin:", adminEmail, "/", adminPass);
+  console.log("Seed complete. Admin user:", adminEmail, "(password was set from SEED_ADMIN_PASSWORD / env)");
 }
 
 main()

@@ -2,6 +2,8 @@ import type { EngineWeights } from "./weights";
 import { blendLambdas, empiricalLambdasFromRolling, type RollingForLambda } from "./empiricalRatings";
 import { buildMatchFeatureVector } from "./matchFeatures";
 import { expectedGoalsFromFeatures, type GoalExpectationOutput } from "./teamStrengthModel";
+import { clamp } from "../utils/math";
+import { inferLambdaTotalFromOver25 } from "../utils/ouInference";
 
 /** @deprecated Use GoalExpectationOutput from teamStrengthModel — kept for gradual refactors. */
 export type GoalInputs = {
@@ -25,6 +27,9 @@ export type GoalInputs = {
   leagueStrengthIndex?: number;
   rolling?: RollingForLambda | null;
   empiricalBlend?: number;
+  /** When both set, total expected goals are softly anchored to de-vigged O/U 2.5. */
+  over25?: number;
+  under25?: number;
 };
 
 /**
@@ -52,12 +57,26 @@ export function expectedGoalsModel(input: GoalInputs): GoalExpectationOutput {
   });
   const base = expectedGoalsFromFeatures(fv);
   const w = input.empiricalBlend ?? 0;
-  if (!input.rolling || w <= 0) return base;
-  const emp = empiricalLambdasFromRolling(input.rolling, fv, base.baseline, fv.restDaysHome, fv.restDaysAway);
-  const blended = blendLambdas(base, emp, w);
-  return {
+  let lambdas = { lambdaHome: base.lambdaHome, lambdaAway: base.lambdaAway };
+  if (input.rolling && w > 0) {
+    const emp = empiricalLambdasFromRolling(input.rolling, fv, base.baseline, fv.restDaysHome, fv.restDaysAway);
+    lambdas = blendLambdas(base, emp, w);
+  }
+  let out: GoalExpectationOutput = {
     ...base,
-    lambdaHome: blended.lambdaHome,
-    lambdaAway: blended.lambdaAway,
+    lambdaHome: lambdas.lambdaHome,
+    lambdaAway: lambdas.lambdaAway,
   };
+  const targetSum =
+    input.over25 && input.under25 ? inferLambdaTotalFromOver25(input.over25, input.under25) : null;
+  if (targetSum != null) {
+    const cur = out.lambdaHome + out.lambdaAway;
+    const scale = clamp(targetSum / cur, 0.82, 1.18);
+    out = {
+      ...out,
+      lambdaHome: clamp(out.lambdaHome * scale, 0.35, 4.2),
+      lambdaAway: clamp(out.lambdaAway * scale, 0.35, 4.2),
+    };
+  }
+  return out;
 }

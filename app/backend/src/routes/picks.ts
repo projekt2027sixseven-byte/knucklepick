@@ -4,6 +4,7 @@ import { prisma } from "../prisma";
 import type { AuthedRequest } from "../middleware/authMiddleware";
 import { requireAuth } from "../middleware/authMiddleware";
 import { countSavedPicks, getUserPlanLimits } from "../services/subscriptionService";
+import { parseResourceId, resourceIdSchema } from "../validation/ids";
 
 const router = Router();
 
@@ -15,7 +16,18 @@ router.get("/", async (req: AuthedRequest, res) => {
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {
-      match: { include: { homeTeam: true, awayTeam: true, league: true } },
+      match: {
+        include: {
+          homeTeam: true,
+          awayTeam: true,
+          league: true,
+          predictions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            include: { settlement: true },
+          },
+        },
+      },
     },
   });
   res.json({ picks });
@@ -24,7 +36,7 @@ router.get("/", async (req: AuthedRequest, res) => {
 router.post("/", async (req: AuthedRequest, res) => {
   const body = z
     .object({
-      matchId: z.string().min(1),
+      matchId: resourceIdSchema,
       label: z.string().max(120).optional(),
     })
     .safeParse(req.body);
@@ -68,8 +80,12 @@ router.post("/", async (req: AuthedRequest, res) => {
 });
 
 router.delete("/:id", async (req: AuthedRequest, res) => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  await prisma.savedPick.deleteMany({ where: { id, userId: req.user!.id } });
+  const parsed = parseResourceId(req.params.id);
+  if (!parsed.ok) {
+    res.status(400).json({ error: "Invalid pick id" });
+    return;
+  }
+  await prisma.savedPick.deleteMany({ where: { id: parsed.id, userId: req.user!.id } });
   res.json({ ok: true });
 });
 

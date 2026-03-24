@@ -1,5 +1,12 @@
 import { clamp, impliedProbabilities } from "../utils/math";
 import type { HistoricalMatchForSimilarity } from "../integrations/types";
+import { bandMismatch, classifyOddsBand, totalBandMismatch, type OddsBand } from "./oddsContext";
+import {
+  bandFromImpliedLambdaTotal,
+  bandFromRealizedTotalGoals,
+  inferLambdaTotalFromOver25,
+  type TotalGoalsBand,
+} from "../utils/ouInference";
 
 /**
  * Market-structural features for cohort matching (team-agnostic).
@@ -17,6 +24,9 @@ export type CurrentMatchFeatures = {
   awayForm: number;
   /** Proxy for expected total goals from prices (not a line — ordinal). */
   impliedScoringEnv: number;
+  oddsBand: OddsBand;
+  /** Pre-match total environment: from inverted O/U 2.5 when odds exist, else derived from implied shape. */
+  totalBand: TotalGoalsBand;
 };
 
 export type SimilarityResult = {
@@ -31,6 +41,10 @@ export type SimilarityResult = {
     bttsPct: number;
     over25Pct: number;
     over35Pct: number;
+    /** Share of cohort where result disagreed with pre-match market favorite (structural upsets). */
+    upsetFrequencyPct: number;
+    /** Human-readable cohort quality for UI. */
+    similarityStrengthLabel: "STRONG" | "MODERATE" | "WEAK";
   };
   similarityScore: number;
 };
@@ -58,7 +72,8 @@ function featureDistance(cur: CurrentMatchFeatures, hist: HistoricalMatchForSimi
     away: hist.impliedAway,
   });
   const dEnv = rangeDistance(cur.impliedScoringEnv, histEnv, 0.45);
-  return dOdds * 0.42 + dGap * 0.22 + dForm * 0.2 + dEnv * 0.16;
+  const dBands = 0.55 * bandMismatch(cur.oddsBand, hist.oddsBand) + 0.45 * totalBandMismatch(cur.totalBand, hist.totalBand);
+  return dOdds * 0.36 + dGap * 0.18 + dForm * 0.17 + dEnv * 0.13 + dBands * 0.16;
 }
 
 export function buildCurrentFeatures(params: {
@@ -68,8 +83,17 @@ export function buildCurrentFeatures(params: {
   strengthGap: number;
   homeForm: number;
   awayForm: number;
+  over25?: number;
+  under25?: number;
 }): CurrentMatchFeatures {
   const imp = impliedProbabilities(params.homeOdds, params.drawOdds, params.awayOdds);
+  const env = impliedScoringEnv(imp);
+  const λOu =
+    params.over25 && params.under25
+      ? inferLambdaTotalFromOver25(params.over25, params.under25)
+      : null;
+  const totalBand: TotalGoalsBand =
+    λOu != null ? bandFromImpliedLambdaTotal(λOu) : bandFromImpliedScoringEnv(env);
   return {
     homeOdds: params.homeOdds,
     drawOdds: params.drawOdds,
@@ -80,8 +104,16 @@ export function buildCurrentFeatures(params: {
     strengthGap: params.strengthGap,
     homeForm: params.homeForm,
     awayForm: params.awayForm,
-    impliedScoringEnv: impliedScoringEnv(imp),
+    impliedScoringEnv: env,
+    oddsBand: classifyOddsBand(imp),
+    totalBand,
   };
+}
+
+function bandFromImpliedScoringEnv(env: number): TotalGoalsBand {
+  if (env < 0.36) return "LOW";
+  if (env < 0.52) return "MID";
+  return "HIGH";
 }
 
 export function findSimilarMatches(
@@ -119,6 +151,22 @@ export function findSimilarMatches(
   const over25Pct = (refs.filter((r) => r.over25).length / n) * 100;
   const over35Pct = (refs.filter((r) => r.totalGoals > 3).length / n) * 100;
 
+  function marketFavorite(r: HistoricalMatchForSimilarity): "HOME" | "DRAW" | "AWAY" {
+    if (r.impliedHome >= r.impliedDraw && r.impliedHome >= r.impliedAway) return "HOME";
+    if (r.impliedDraw >= r.impliedAway) return "DRAW";
+    return "AWAY";
+  }
+  let upsets = 0;
+  for (const r of refs) {
+    const fav = marketFavorite(r);
+    if (r.result1x2 !== fav) upsets += 1;
+  }
+  const upsetFrequencyPct = (upsets / n) * 100;
+
+  let similarityStrengthLabel: "STRONG" | "MODERATE" | "WEAK" = "WEAK";
+  if (refs.length >= 10 && avgScore >= 58) similarityStrengthLabel = "STRONG";
+  else if (refs.length >= 6 && avgScore >= 42) similarityStrengthLabel = "MODERATE";
+
   return {
     similarMatches,
     stats: {
@@ -131,6 +179,8 @@ export function findSimilarMatches(
       bttsPct,
       over25Pct,
       over35Pct,
+      upsetFrequencyPct,
+      similarityStrengthLabel,
     },
     similarityScore: clamp(avgScore, 0, 100),
   };
@@ -151,6 +201,7 @@ export function syntheticHistoricalPool(size = 220): HistoricalMatchForSimilarit
     let result: "HOME" | "DRAW" | "AWAY" = "DRAW";
     if (hg > ag) result = "HOME";
     if (ag > hg) result = "AWAY";
+    const tg = hg + ag;
     out.push({
       externalId: `hist_${i}`,
       homeOdds,
@@ -162,8 +213,10 @@ export function syntheticHistoricalPool(size = 220): HistoricalMatchForSimilarit
       strengthGap,
       homeForm,
       awayForm,
+      oddsBand: classifyOddsBand(imp),
+      totalBand: bandFromRealizedTotalGoals(tg),
       result1x2: result,
-      totalGoals: hg + ag,
+      totalGoals: tg,
       homeGoals: hg,
       awayGoals: ag,
       btts: hg > 0 && ag > 0,

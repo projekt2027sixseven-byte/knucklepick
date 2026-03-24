@@ -1,9 +1,12 @@
 node_modules
+# Prisma client (custom output path — regenerated with npm run db:generate)
+app/db/prisma/generated
 .env
 .env.local
 .next
 dist
 .turbo
 *.log
+*.tsbuildinfo
 .DS_Store
 app/frontend/.dev-port

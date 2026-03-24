@@ -11,8 +11,11 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
+  "exclude": ["src/**/__tests__/**", "src/test/**"],
   "include": [
     "src/**/*.ts",
+    "../db/prisma-client.ts",
+    "../db/prisma/generated/**/*.ts",
     "../config/**/*.ts",
     "../jobs/**/*.ts",
     "../utils/**/*.ts",

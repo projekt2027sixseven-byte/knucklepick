@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../../../db/prisma-client";
 
 const START_OF_DAY = () => {
   const d = new Date();

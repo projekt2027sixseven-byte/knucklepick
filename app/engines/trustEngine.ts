@@ -45,11 +45,17 @@ export function buildMethodologyBullets(flags: {
   modelVersion: string;
   dixonColesRho: number;
   empiricalBlend?: number;
+  ouAnchored?: boolean;
 }): string[] {
   const lines = [
     `${flags.modelVersion}: attack/defense decomposition on log-rates with league baseline; Poisson score lattice + Dixon–Coles ρ≈${flags.dixonColesRho.toFixed(3)} for low-score dependence.`,
     "1X2 from the same normalized lattice as exact-score lines (no independent guesswork).",
   ];
+  if (flags.ouAnchored) {
+    lines.push(
+      "Total Poisson intensity softly anchored to de-vigged O/U 2.5 when both sides of the line are available — keeps λ aligned with the goals market."
+    );
+  }
   if ((flags.empiricalBlend ?? 0) > 0.05) {
     lines.push(
       `Rolling team GF/GA from settled fixtures in the database are blended into Poisson means (weight ≈${((flags.empiricalBlend ?? 0) * 100).toFixed(0)}%), with shrinkage when sample size is small.`
@@ -61,7 +67,7 @@ export function buildMethodologyBullets(flags: {
   }
   if (flags.similarityApplied) {
     lines.push(
-      `Historical market-structure cohort (n≈${flags.cohortSize}) reweights tails using implied-shape similarity, not team-name matching.`
+      `Historical cohort (n≈${flags.cohortSize}) matches on de-vigged 1X2 bands + total-goals context + form/strength — not team-name matching.`
     );
   } else {
     lines.push("Similarity cohort bootstrapped from synthetic structural draws until enough settled fixtures exist.");

@@ -1,5 +1,7 @@
 generator client {
   provider = "prisma-client-js"
+  /// Outside node_modules to avoid Windows EPERM on query_engine rename (Defender / file locks).
+  output   = "./generated/client"
 }
 
 datasource db {
@@ -28,6 +30,12 @@ enum RiskLevel {
   EXTREME
 }
 
+/** Whether the fixture met minimum data rules before a prediction was stored. */
+enum PredictionEligibility {
+  OK
+  INSUFFICIENT_DATA
+}
+
 model User {
   id                 String            @id @default(cuid())
   email              String            @unique
@@ -42,6 +50,7 @@ model User {
   preferences        UserPreferences?
   watchlist          WatchlistItem[]
   savedPicks         SavedPick[]
+  digestLogs         DigestLog[]
 }
 
 model UserPreferences {
@@ -51,6 +60,7 @@ model UserPreferences {
   digestEnabled         Boolean   @default(false)
   digestHourUtc         Int       @default(8)
   favoriteLeagueIds     String[]  @default([])
+  favoriteTeamIds       String[]  @default([])
   reducedMotion         Boolean   @default(false)
   onboardingStep        Int       @default(0)
   onboardingCompletedAt DateTime?
@@ -127,6 +137,11 @@ model Match {
   similarityCases SimilarityCase[]
   watchlistItems  WatchlistItem[]
   savedPicks      SavedPick[]
+  predictionEligibility PredictionEligibility @default(OK)
+  /** When eligibility is INSUFFICIENT_DATA — short machine reason (e.g. odds_unmatched). */
+  insufficientDataReason String?
+  /** Safety / data-quality labels for UI (e.g. UNRELIABLE_MATCH, LOW_DATA_QUALITY). */
+  reliabilityFlags      String[]         @default([])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -235,6 +250,19 @@ model Prediction {
   reasoning                String              @db.Text
   noBet                    Boolean             @default(false)
   trapMatch                Boolean             @default(false)
+  /** True when fixtures/odds came from demo or forced mock — excluded from public track-record stats. */
+  mockContext              Boolean             @default(false)
+  /** 1X2 decimals copied at prediction time (for ROI / audit). */
+  snapshotHomeOdds         Float?
+  snapshotDrawOdds         Float?
+  snapshotAwayOdds         Float?
+  /** Fuzzy book–fixture match score when odds came from The Odds API (0–1). */
+  oddsMatchScore           Float?
+  /** Δ vs previous engine run (same fixture). Null on first run. */
+  confidenceDeltaPrev    Float?
+  edgeOnPickPctDeltaPrev Float?
+  maxEdgeProbDeltaPrev   Float?
+  settlement               PredictionSettlement?
   scenarios                Json?
   similarityStats          Json?
   factors                  PredictionFactor[]
@@ -242,6 +270,34 @@ model Prediction {
 
   @@index([matchId])
   @@index([createdAt])
+  @@index([mockContext, createdAt])
+}
+
+/** Ex-post evaluation vs full-time result — powers accuracy / ROI / calibration (real-odds rows only). */
+model PredictionSettlement {
+  id             String      @id @default(cuid())
+  predictionId   String      @unique
+  prediction     Prediction  @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  matchId        String
+  homeScore      Int
+  awayScore      Int
+  actual1x2      String
+  /** Model top pick (1X2). */
+  predicted1x2   String
+  outcomeHit     Boolean
+  exactScoreHit  Boolean
+  /** Over 2.5 goals — null when model was UNCERTAIN on O/U. */
+  ouHit          Boolean?
+  /** Both teams to score — null when model was UNCERTAIN. */
+  bttsHit        Boolean?
+  /** Brier score on calibrated 1X2 triplet (lower is better). */
+  brier1x2       Float
+  /** P&L in flat units: +((decimal_odds - 1)) if pick wins else -1, using snapshot odds for the predicted side. */
+  profitFlatUnits Float
+  settledAt      DateTime    @default(now())
+
+  @@index([matchId])
+  @@index([settledAt])
 }
 
 model PredictionFactor {
@@ -282,6 +338,21 @@ model AdminLog {
   action    String
   payload   Json?
   createdAt DateTime @default(now())
+}
+
+/** Audit trail for digest fan-out attempts (habit / retention). */
+model DigestLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status    String   @default("SCHEDULED")
+  payload   Json?
+  error     String?  @db.Text
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model EngineWeight {

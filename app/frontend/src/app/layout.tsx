@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Bricolage_Grotesque, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AppShell } from "@/components/AppShell";
+import { AuthSessionBridge } from "@/components/AuthSessionBridge";
 import { OnboardingModal } from "@/components/OnboardingModal";
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/constants";
 import { getPublicEnv } from "@/lib/env";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
 
@@ -18,12 +29,12 @@ export const metadata: Metadata = {
     template: `%s · ${PRODUCT_NAME}`,
   },
   description:
-    "Oracle Pitch — a premium football intelligence desk: calibrated probabilities, trust indexing, similarity cohorts, and vault workflows. Built for analysts who want process, not hype.",
+    "Football match intelligence: calibrated probabilities, risk flags, watchlists, and vault snapshots — analytical tooling, not a tipping service.",
   applicationName: PRODUCT_NAME,
   openGraph: {
     title: `${PRODUCT_NAME} · ${PRODUCT_TAGLINE}`,
     description:
-      "Calibrated match intelligence, trust & risk governance, watchlists and vaults — a serious control room for football probabilities.",
+      "Probabilities, trust rails, watchlists, and vault — for analysis; past results do not guarantee future outcomes.",
     url: appUrl,
     siteName: PRODUCT_NAME,
     locale: "en_US",
@@ -33,7 +44,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: `${PRODUCT_NAME} · ${PRODUCT_TAGLINE}`,
     description:
-      "Calibrated match intelligence, trust & risk governance, watchlists and vaults — a serious control room for football probabilities.",
+      "Probabilities, trust rails, watchlists, and vault — for analysis; past results do not guarantee future outcomes.",
   },
   robots: {
     index: true,
@@ -46,9 +57,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
+    <html lang="en" className="scroll-smooth">
+      <body className={`${display.variable} ${dmSans.variable} font-sans antialiased`}>
         <QueryProvider>
+          <AuthSessionBridge />
           <AppShell>
             {children}
             <OnboardingModal />

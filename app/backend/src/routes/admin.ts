@@ -4,10 +4,29 @@ import { prisma } from "../prisma";
 import type { AuthedRequest } from "../middleware/authMiddleware";
 import { requireAdmin, requireAuth } from "../middleware/authMiddleware";
 import { ingestAndPredict } from "../../../services/predictionPipeline";
+import { cacheDel } from "../../../utils/cache";
+import { parseResourceId } from "../validation/ids";
 
 const router = Router();
 
 router.use(requireAuth, requireAdmin);
+
+router.get("/overview", async (_req, res) => {
+  const [users, matches, predictions, subs, lastLog] = await Promise.all([
+    prisma.user.count(),
+    prisma.match.count(),
+    prisma.prediction.count(),
+    prisma.subscription.count({ where: { status: "ACTIVE" } }),
+    prisma.adminLog.findFirst({ orderBy: { createdAt: "desc" }, where: { action: "PIPELINE_RUN" } }),
+  ]);
+  const maintenance = await prisma.appConfig.findUnique({ where: { key: "MAINTENANCE_MODE" } });
+  res.json({
+    counts: { users, matches, predictions, activeSubscriptions: subs },
+    lastPipelineRun: lastLog?.createdAt ?? null,
+    lastPipelineResult: lastLog?.payload ?? null,
+    maintenanceMode: maintenance?.value === "true",
+  });
+});
 
 router.get("/users", async (_req, res) => {
   const users = await prisma.user.findMany({
@@ -19,13 +38,23 @@ router.get("/users", async (_req, res) => {
 });
 
 router.patch("/users/:id/role", async (req, res) => {
+  const idParsed = parseResourceId(req.params.id);
+  if (!idParsed.ok) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
   const body = z.object({ role: z.enum(["USER", "ADMIN"]) }).safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.flatten() });
     return;
   }
+  const adminId = (req as AuthedRequest).user?.id;
+  if (adminId && adminId === idParsed.id && body.data.role === "USER") {
+    res.status(400).json({ error: "You cannot remove your own admin role from this UI." });
+    return;
+  }
   const user = await prisma.user.update({
-    where: { id: req.params.id },
+    where: { id: idParsed.id },
     data: { role: body.data.role },
   });
   await prisma.adminLog.create({
@@ -116,6 +145,7 @@ router.get("/logs", async (_req, res) => {
 
 router.post("/pipeline/run", async (req: AuthedRequest, res) => {
   const result = await ingestAndPredict(prisma);
+  await cacheDel("meta:leagues:v1").catch(() => undefined);
   await prisma.adminLog.create({
     data: {
       adminId: req.user?.id,

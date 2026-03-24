@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../db/prisma-client";
 
 export type DigestFixture = {
   matchId: string;

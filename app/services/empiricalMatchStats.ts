@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../db/prisma-client";
 import type { RollingForLambda } from "../engines/empiricalRatings";
 
 const ROLLING_WINDOW = 8;
